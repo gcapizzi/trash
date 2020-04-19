@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
+clap = "2.33"
 
 [dev-dependencies]
 expect = { git = "https://github.com/gcapizzi/expect.git" }
