@@ -1,0 +1,11 @@
+[package]
+name = "trash"
+version = "0.1.0"
+authors = ["Giuseppe Capizzi <g.capizzi@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+
+[dev-dependencies]
+expect = { git = "https://github.com/gcapizzi/expect.git" }
