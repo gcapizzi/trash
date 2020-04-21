@@ -49,7 +49,7 @@ mod tests {
 
         let output = Command::new("./target/debug/trash")
             .arg(&file_path)
-            .env("XDG_DATA_DIR", &xdg_data_path.to_str().unwrap())
+            .env("XDG_DATA_HOME", &xdg_data_path.to_str().unwrap())
             .output()
             .unwrap();
 

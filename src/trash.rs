@@ -28,8 +28,8 @@ impl<'a, E: Environment, F: FileSystem> Trash<'a, E, F> {
     }
 
     pub fn put<T: AsRef<Path>>(&self, target: T, time: SystemTime) -> Result<(), Error> {
-        let xdg_data_dir = self.environment.var("XDG_DATA_DIR")?;
-        let trash_path = Path::new(&xdg_data_dir).join("Trash");
+        let xdg_data_home = self.environment.var("XDG_DATA_HOME")?;
+        let trash_path = Path::new(&xdg_data_home).join("Trash");
         let target_file_name = target
             .as_ref()
             .file_name()
@@ -69,7 +69,7 @@ mod tests {
         let now = Utc.ymd(2004, 8, 31).and_hms(22, 32, 8).into();
 
         let mut env_vars = HashMap::new();
-        env_vars.insert("XDG_DATA_DIR", "/xdg-data-dir");
+        env_vars.insert("XDG_DATA_HOME", "/xdg-data-dir");
         let environment = FakeEnvironment::new(env_vars);
         let filesystem = FakeFileSystem::new();
         let trash = Trash::new(&environment, &filesystem);
