@@ -1,13 +1,20 @@
 use crate::trash;
 
 use anyhow::Error;
-use std::path::Path;
+use std::{fs, io::Write, path::Path};
 
 pub struct FileSystem {}
 
 impl FileSystem {
     pub fn new() -> FileSystem {
         FileSystem {}
+    }
+
+    fn create_parent_dir<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
+        if let Some(parent) = &path.as_ref().parent() {
+            fs::create_dir_all(&parent)?;
+        }
+        Ok(())
     }
 }
 
@@ -17,10 +24,15 @@ impl trash::FileSystem for FileSystem {
         source: S,
         destination: D,
     ) -> Result<(), Error> {
-        if let Some(parent) = &destination.as_ref().parent() {
-            std::fs::create_dir_all(&parent)?;
-        }
-        std::fs::rename(source, destination)?;
+        self.create_parent_dir(&destination)?;
+        fs::rename(source, destination)?;
+        Ok(())
+    }
+
+    fn create_text_file<P: AsRef<Path>>(&self, path: P, contents: String) -> Result<(), Error> {
+        self.create_parent_dir(&path)?;
+        let mut file = fs::File::create(path).unwrap();
+        file.write_all(contents.as_bytes())?;
         Ok(())
     }
 }
@@ -52,6 +64,23 @@ mod tests {
         expect(&destination_path).to(exist());
         let destination_contents = read_text_file(&destination_path);
         expect(&destination_contents).to(equal("FOO"));
+
+        fs::remove_dir_all(base_dir).unwrap();
+    }
+
+    #[test]
+    fn it_creates_a_text_file_creating_destination_dir_if_necessary() {
+        let filesystem = super::FileSystem::new();
+
+        let base_dir = create_tmp_dir();
+        let file_path = &base_dir.join("path/to/file");
+
+        let result = filesystem.create_text_file(&file_path, String::from("THE FILE CONTENTS"));
+
+        expect(&result).to(be_ok());
+        expect(&file_path).to(exist());
+        let file_contents = read_text_file(&file_path);
+        expect(&file_contents).to(equal(String::from("THE FILE CONTENTS")));
 
         fs::remove_dir_all(base_dir).unwrap();
     }

@@ -4,7 +4,7 @@ mod trash;
 
 use anyhow::{anyhow, Error};
 use clap::{App, Arg};
-use std::path::Path;
+use std::{path::Path, time::SystemTime};
 
 fn main() -> Result<(), Error> {
     let matches = App::new("trash")
@@ -25,7 +25,7 @@ fn main() -> Result<(), Error> {
     let filesystem = filesystem::FileSystem::new();
     let trash = trash::Trash::new(&environment, &filesystem);
 
-    trash.put(file_path)?;
+    trash.put(file_path, SystemTime::now())?;
 
     Ok(())
 }
@@ -35,14 +35,12 @@ mod tests {
     use expect::{expect, matchers::*};
     use std::{
         fs,
-        io::Write,
         path::{Path, PathBuf},
         process::Command,
-        time::{SystemTime, UNIX_EPOCH},
     };
 
     #[test]
-    fn it_moves_the_target_to_the_trash_dir() {
+    fn it_trashes_the_target_according_to_the_spec() {
         let base_dir = create_tmp_dir();
         let file_path = base_dir.join("delete_me");
         create_text_file(&file_path, "DELETE_ME");
@@ -55,20 +53,29 @@ mod tests {
             .output()
             .unwrap();
 
-        dbg!(std::str::from_utf8(&output.stderr).unwrap());
-
         expect(&output.status.success()).to(equal(true));
+
         expect(&file_path).not_to(exist());
         expect(&trash_path.join("files/delete_me")).to(exist());
         expect(&read_text_file(trash_path.join("files/delete_me"))).to(equal("DELETE_ME"));
-        // expect(&xdg_data_path.join("Trash/info/delete_me.trashinfo")).to(exist());
-        // let info_contents = &fs::read_to_string(xdg_data_path.join("Trash/info/delete_me"))?;
-        // expect(info).to(equal("[Trash Info]\nPath={}\nDeletionDate={}"));
+
+        expect(&xdg_data_path.join("Trash/info/delete_me.trashinfo")).to(exist());
+        let info_contents = read_text_file(trash_path.join("info/delete_me.trashinfo"));
+        let mut info_lines = info_contents.lines();
+        expect(&info_lines.next().unwrap()).to(equal("[Trash Info]"));
+        expect(&info_lines.next().unwrap()).to(equal(
+            format!("Path={}", &file_path.to_str().unwrap()).as_str(),
+        ));
+        expect(&info_lines.next().unwrap()).to(match_regex(
+            r"DeletionDate=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}\+00:00",
+        ));
 
         fs::remove_dir_all(base_dir).unwrap();
     }
 
     fn create_tmp_dir() -> PathBuf {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -79,6 +86,8 @@ mod tests {
     }
 
     fn create_text_file(path: &Path, contents: &str) {
+        use std::io::Write;
+
         let mut file = fs::File::create(path).unwrap();
         file.write_all(contents.as_bytes()).unwrap();
     }

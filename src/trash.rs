@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Error};
-use std::path::Path;
+use std::{path::Path, time::SystemTime};
 
 pub trait Environment {
     fn var(&self, name: &str) -> Result<String, Error>;
@@ -11,6 +11,7 @@ pub trait FileSystem {
         source: S,
         destination: D,
     ) -> Result<(), Error>;
+    fn create_text_file<P: AsRef<Path>>(&self, path: P, contents: String) -> Result<(), Error>;
 }
 
 pub struct Trash<'a, E, F> {
@@ -26,24 +27,36 @@ impl<'a, E: Environment, F: FileSystem> Trash<'a, E, F> {
         }
     }
 
-    pub fn put<T: AsRef<Path>>(&self, target: T) -> Result<(), Error> {
+    pub fn put<T: AsRef<Path>>(&self, target: T, time: SystemTime) -> Result<(), Error> {
         let xdg_data_dir = self.environment.var("XDG_DATA_DIR")?;
+        let trash_path = Path::new(&xdg_data_dir).join("Trash");
         let target_file_name = target
             .as_ref()
             .file_name()
             .ok_or(anyhow!("target {:?} has no file name"))?;
-        self.filesystem.rename(
-            &target,
-            Path::new(&xdg_data_dir)
-                .join("Trash/files")
-                .join(&target_file_name),
-        )
+
+        let date_time: chrono::DateTime<chrono::Utc> = time.into();
+        self.filesystem.create_text_file(
+            &trash_path
+                .join("info")
+                .join(&target_file_name)
+                .with_extension("trashinfo"),
+            String::from(format!(
+                "[Trash Info]\nPath={}\nDeletionDate={}",
+                target.as_ref().to_string_lossy(),
+                date_time.format("%+"),
+            )),
+        )?;
+
+        self.filesystem
+            .rename(&target, &trash_path.join("files").join(&target_file_name))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{offset::TimeZone, Utc};
     use expect::{expect, matchers::*};
     use std::{
         cell::RefCell,
@@ -53,30 +66,43 @@ mod tests {
 
     #[test]
     fn it_moves_the_target_to_the_trash_dir() {
+        let now = Utc.ymd(2004, 8, 31).and_hms(22, 32, 8).into();
+
         let mut env_vars = HashMap::new();
         env_vars.insert("XDG_DATA_DIR", "/xdg-data-dir");
         let environment = FakeEnvironment::new(env_vars);
         let filesystem = FakeFileSystem::new();
         let trash = Trash::new(&environment, &filesystem);
 
-        expect(&trash.put("/path/to/foo")).to(be_ok());
+        let result = trash.put("/path/to/foo", now);
+
+        expect(&result).to(be_ok());
         expect(&filesystem.get_rename("/path/to/foo"))
-            .to(equal(Path::new("/xdg-data-dir/Trash/files/foo")))
+            .to(equal(Path::new("/xdg-data-dir/Trash/files/foo")));
+        expect(&filesystem.get_file("/xdg-data-dir/Trash/info/foo.trashinfo")).to(equal(
+            String::from("[Trash Info]\nPath=/path/to/foo\nDeletionDate=2004-08-31T22:32:08+00:00"),
+        ))
     }
 
     struct FakeFileSystem {
         moves: RefCell<HashMap<PathBuf, PathBuf>>,
+        files: RefCell<HashMap<PathBuf, String>>,
     }
 
     impl FakeFileSystem {
         fn new() -> FakeFileSystem {
             FakeFileSystem {
                 moves: RefCell::new(HashMap::new()),
+                files: RefCell::new(HashMap::new()),
             }
         }
 
         fn get_rename<S: AsRef<Path>>(&self, source: S) -> PathBuf {
             self.moves.borrow()[source.as_ref()].clone()
+        }
+
+        fn get_file<P: AsRef<Path>>(&self, path: P) -> String {
+            self.files.borrow()[path.as_ref()].clone()
         }
     }
 
@@ -90,6 +116,13 @@ mod tests {
                 source.as_ref().to_path_buf(),
                 destination.as_ref().to_path_buf(),
             );
+            Ok(())
+        }
+
+        fn create_text_file<P: AsRef<Path>>(&self, path: P, contents: String) -> Result<(), Error> {
+            self.files
+                .borrow_mut()
+                .insert(path.as_ref().to_path_buf(), contents);
             Ok(())
         }
     }
