@@ -35,6 +35,7 @@ fn it_trashes_the_target_according_to_the_spec() {
     expect(&info_lines.next().unwrap()).to(match_regex(
         r"DeletionDate=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}\+00:00",
     ));
+    expect(&info_lines.next()).to(be_none());
 
     fs::remove_dir_all(base_dir).unwrap();
 }
