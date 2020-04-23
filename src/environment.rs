@@ -20,7 +20,10 @@ impl trash::Environment for Environment {
 #[cfg(test)]
 mod tests {
     use crate::trash::Environment;
-    use expect::{expect, matchers::*};
+    use expect::{
+        expect,
+        matchers::{equal, result::be_ok},
+    };
 
     #[test]
     fn it_reads_an_environment_variable() {

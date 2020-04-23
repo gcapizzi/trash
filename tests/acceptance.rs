@@ -1,4 +1,7 @@
-use expect::{expect, matchers::*};
+use expect::{
+    expect,
+    matchers::{equal, option::be_none, path::exist, regex::match_regex},
+};
 use std::{
     fs,
     path::{Path, PathBuf},

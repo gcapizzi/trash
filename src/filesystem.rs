@@ -40,7 +40,10 @@ impl trash::FileSystem for FileSystem {
 #[cfg(test)]
 mod tests {
     use crate::trash::FileSystem;
-    use expect::{expect, matchers::*};
+    use expect::{
+        expect,
+        matchers::{equal, path::exist, result::be_ok},
+    };
     use std::{
         fs,
         io::Write,

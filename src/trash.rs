@@ -57,7 +57,10 @@ impl<'a, E: Environment, F: FileSystem> Trash<'a, E, F> {
 mod tests {
     use super::*;
     use chrono::{offset::TimeZone, Utc};
-    use expect::{expect, matchers::*};
+    use expect::{
+        expect,
+        matchers::{equal, result::be_ok},
+    };
     use std::{
         cell::RefCell,
         collections::HashMap,
