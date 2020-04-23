@@ -16,7 +16,7 @@ fn it_trashes_the_target_according_to_the_spec() {
     let xdg_data_path = base_dir.join("xdg_data");
     let trash_path = xdg_data_path.join("Trash");
 
-    let output = Command::new("./target/debug/trash")
+    let output = Command::new(env!("CARGO_BIN_EXE_trash"))
         .arg(&file_path)
         .env("XDG_DATA_HOME", &xdg_data_path.to_str().unwrap())
         .output()
