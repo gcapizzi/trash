@@ -76,7 +76,7 @@ dependencies = [
 [[package]]
 name = "expect"
 version = "0.1.0"
-source = "git+https://github.com/gcapizzi/expect.git#88d53cba8140aea25043a4519a687660cd8ce3d2"
+source = "git+https://github.com/gcapizzi/expect.git#783a9208e16355478f16a51cbf3d189913401223"
 dependencies = [
  "regex",
 ]
