@@ -1,5 +1,8 @@
 use anyhow::{anyhow, Error};
-use std::{path::Path, time::SystemTime};
+use std::{
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 pub trait Environment {
     fn var(&self, name: &str) -> Result<String, Error>;
@@ -28,8 +31,7 @@ impl<'a, E: Environment, F: FileSystem> Trash<'a, E, F> {
     }
 
     pub fn put<T: AsRef<Path>>(&self, target: T, time: SystemTime) -> Result<(), Error> {
-        let xdg_data_home = self.environment.var("XDG_DATA_HOME")?;
-        let trash_path = Path::new(&xdg_data_home).join("Trash");
+        let trash_path = self.get_trash_path()?;
         let target_file_name = target
             .as_ref()
             .file_name()
@@ -51,6 +53,21 @@ impl<'a, E: Environment, F: FileSystem> Trash<'a, E, F> {
         self.filesystem
             .rename(&target, &trash_path.join("files").join(&target_file_name))
     }
+
+    fn get_trash_path(&self) -> Result<PathBuf, Error> {
+        let xdg_data_home = self
+            .environment
+            .var("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|_| self.get_default_xdg_data_home())?;
+        Ok(xdg_data_home.join("Trash"))
+    }
+
+    fn get_default_xdg_data_home(&self) -> Result<PathBuf, Error> {
+        self.environment
+            .var("HOME")
+            .map(|home| Path::new(&home).join(".local/share"))
+    }
 }
 
 #[cfg(test)]
@@ -59,7 +76,10 @@ mod tests {
     use chrono::{offset::TimeZone, Utc};
     use expect::{
         expect,
-        matchers::{equal, result::be_ok},
+        matchers::{
+            equal,
+            result::{be_err, be_ok},
+        },
     };
     use std::{
         cell::RefCell,
@@ -87,6 +107,45 @@ mod tests {
         expect(&filesystem.get_file("/xdg-data-dir/Trash/info/foo.trashinfo")).to(equal(
             String::from("[Trash Info]\nPath=/path/to/foo\nDeletionDate=2004-08-31T22:32:08+00:00"),
         ))
+    }
+
+    #[test]
+    fn it_defaults_xdg_data_home() {
+        let now = Utc.ymd(2004, 8, 31).and_hms(22, 32, 8).into();
+
+        let mut env_vars = HashMap::new();
+        env_vars.insert("HOME", "/home/alice");
+        let environment = FakeEnvironment::new(env_vars);
+        let filesystem = FakeFileSystem::new();
+        let trash = Trash::new(&environment, &filesystem);
+
+        let result = trash.put("/path/to/foo", now);
+
+        expect(&result).to(be_ok());
+        expect(&filesystem.number_of_renames()).to(equal(1));
+        expect(&filesystem.get_rename("/path/to/foo"))
+            .to(equal(Path::new("/home/alice/.local/share/Trash/files/foo")));
+        expect(&filesystem.number_of_files()).to(equal(1));
+        expect(&filesystem.get_file("/home/alice/.local/share/Trash/info/foo.trashinfo")).to(equal(
+            String::from("[Trash Info]\nPath=/path/to/foo\nDeletionDate=2004-08-31T22:32:08+00:00"),
+        ))
+    }
+
+    #[test]
+    fn it_fails_if_nor_xdg_data_home_or_home_are_defined() {
+        let now = Utc.ymd(2004, 8, 31).and_hms(22, 32, 8).into();
+
+        let environment = FakeEnvironment::new(HashMap::new());
+        let filesystem = FakeFileSystem::new();
+        let trash = Trash::new(&environment, &filesystem);
+
+        let result = trash.put("/path/to/foo", now);
+
+        expect(&result).to(be_err());
+        expect(&result.err().unwrap().to_string())
+            .to(equal(String::from("environment variable not found")));
+        expect(&filesystem.number_of_renames()).to(equal(0));
+        expect(&filesystem.number_of_files()).to(equal(0));
     }
 
     struct FakeFileSystem {
@@ -152,7 +211,11 @@ mod tests {
 
     impl Environment for FakeEnvironment<'_> {
         fn var(&self, name: &str) -> Result<String, Error> {
-            Ok(self.vars[name].to_string())
+            let value = self
+                .vars
+                .get(name)
+                .ok_or(anyhow!("environment variable not found"))?;
+            Ok(value.to_string())
         }
     }
 }
