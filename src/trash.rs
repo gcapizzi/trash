@@ -68,7 +68,7 @@ mod tests {
     };
 
     #[test]
-    fn it_moves_the_target_to_the_trash_dir() {
+    fn it_trashes_the_target_according_to_the_spec() {
         let now = Utc.ymd(2004, 8, 31).and_hms(22, 32, 8).into();
 
         let mut env_vars = HashMap::new();
@@ -80,8 +80,10 @@ mod tests {
         let result = trash.put("/path/to/foo", now);
 
         expect(&result).to(be_ok());
+        expect(&filesystem.number_of_renames()).to(equal(1));
         expect(&filesystem.get_rename("/path/to/foo"))
             .to(equal(Path::new("/xdg-data-dir/Trash/files/foo")));
+        expect(&filesystem.number_of_files()).to(equal(1));
         expect(&filesystem.get_file("/xdg-data-dir/Trash/info/foo.trashinfo")).to(equal(
             String::from("[Trash Info]\nPath=/path/to/foo\nDeletionDate=2004-08-31T22:32:08+00:00"),
         ))
@@ -104,8 +106,16 @@ mod tests {
             self.moves.borrow()[source.as_ref()].clone()
         }
 
+        fn number_of_renames(&self) -> usize {
+            self.moves.borrow().len()
+        }
+
         fn get_file<P: AsRef<Path>>(&self, path: P) -> String {
             self.files.borrow()[path.as_ref()].clone()
+        }
+
+        fn number_of_files(&self) -> usize {
+            self.files.borrow().len()
         }
     }
 
